@@ -1,4 +1,4 @@
-while read -r f ; do source "$f" ;  done < <(find ~/.zshaliases -wholename '*.sh')
+while read -r f ; do source "$f" ;  done < <(find ./.zshaliases -wholename '*.sh')
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
