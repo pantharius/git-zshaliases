@@ -43,9 +43,8 @@ nscan() {
 
   # Récupérer les PIDs
   local NODE_PIDS=()
-  while IFS= read -r pid; do
-    NODE_PIDS+=("$pid")
-  done < <(lsof -i -P | grep LISTEN | grep -i node | awk '{print $2}' | sort -u)
+  local pid
+  NODE_PIDS=("${(@f)$(lsof -i -P 2>/dev/null | grep LISTEN | grep -i node | awk '{print $2}' | sort -u)}")
 
   if [ ${#NODE_PIDS[@]} -eq 0 ]; then
     echo -e "\x1b[33mAucun service Node.js en cours d'exécution n'a été trouvé.\x1b[0m"
