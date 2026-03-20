@@ -29,12 +29,13 @@ gsall() {
     has_colors=false
   fi
 
-  local RED GREEN YELLOW BLUE CYAN BOLD DIM NC
+  local RED GREEN YELLOW BLUE MAGENTA CYAN BOLD DIM NC
   if [ "$has_colors" = true ]; then
     RED='\033[0;31m'
     GREEN='\033[0;32m'
     YELLOW='\033[1;33m'
     BLUE='\033[0;34m'
+    MAGENTA='\033[0;35m'
     CYAN='\033[0;36m'
     BOLD='\033[1m'
     DIM='\033[2m'
@@ -44,6 +45,7 @@ gsall() {
     GREEN=''
     YELLOW=''
     BLUE=''
+    MAGENTA=''
     CYAN=''
     BOLD=''
     DIM=''
@@ -172,7 +174,7 @@ gsall() {
         ;;
       R)
         label="renamed"
-        color="$CYAN"
+        color="$MAGENTA"
         ;;
       C)
         label="copied"
@@ -318,6 +320,7 @@ gsall() {
     local behind_color
     local line
     local counts
+    local has_remote_diff=false
 
     repo_name="$(basename "$dir")"
     branch="$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
@@ -333,6 +336,21 @@ gsall() {
       counts="$(git -C "$dir" rev-list --left-right --count HEAD...@{upstream} 2>/dev/null || echo '0 0')"
       ahead="$(awk '{print $1}' <<< "$counts")"
       behind="$(awk '{print $2}' <<< "$counts")"
+    fi
+
+    ahead_color="$NC"
+    behind_color="$NC"
+
+    if [ "$ahead" != "0" ]; then
+      ahead_color="$YELLOW"
+    fi
+
+    if [ "$behind" != "0" ]; then
+      behind_color="$YELLOW"
+    fi
+
+    if [ "$ahead" != "0" ] || [ "$behind" != "0" ]; then
+      has_remote_diff=true
     fi
 
     porcelain="$(git -C "$dir" status --short --untracked-files=all 2>/dev/null || true)"
@@ -355,33 +373,24 @@ gsall() {
       done <<< "$porcelain"
     fi
 
-    ahead_color="$NC"
-    behind_color="$NC"
-
-    if [ "$ahead" != "0" ]; then
-      ahead_color="$YELLOW"
-    fi
-
-    if [ "$behind" != "0" ]; then
-      behind_color="$YELLOW"
-    fi
-
     if [ "$brief_only" = false ]; then
       print_repo_heading "$repo_name" "$dir"
       printf '%b\n' "  branch   : ${CYAN}${branch}${NC}"
 
       if [ -n "$upstream" ]; then
-        if [ "$ahead" != "0" ] || [ "$behind" != "0" ]; then
+        if [ "$has_remote_diff" = true ]; then
           printf '%b\n' "  upstream : ${DIM}${upstream}${NC}"
           printf '%b\n' "  sync     : ahead=${ahead_color}${ahead}${NC} behind=${behind_color}${behind}${NC}"
+        else
+          printf '%b\n' "  upstream : ${GREEN}up-to-date${NC}"
         fi
       else
-        printf '%b\n' "  upstream : ${RED}none${NC}"
+        printf '%b\n' "  upstream : ${DIM}no tracking branch${NC}"
       fi
     fi
 
     if [ "$has_changes" = false ]; then
-      if [ "$has_upstream" = true ] && { [ "$ahead" != "0" ] || [ "$behind" != "0" ]; }; then
+      if [ "$has_upstream" = true ] && [ "$has_remote_diff" = true ]; then
         summary_clean_with_upstream=$((summary_clean_with_upstream + 1))
         summary_clean_with_upstream_repos+=("$repo_name")
       else
@@ -438,17 +447,23 @@ gsall() {
 
   local found_any=false
   local dir
-  printf '%b\n' "${BOLD}  ___  ____   __   __    __   ${NC}"
-  printf '%b\n' "${BOLD} / __)/ ___) / _\\ (  )  (  )  ${NC}"
-  printf '%b\n' "${BOLD}( (_ \\\\___ \\/    \\/ (_/\\/ (_/\\ ${NC}"
-  printf '%b\n\n' "${BOLD} \\___/(____/\\_/\\_/\\____/\\____/${NC}"
+  printf '\n'
+  printf '%b\n' "${MAGENTA}${BOLD}  ██████╗ ███████╗ █████╗ ██╗     ██╗${NC}"
+  printf '%b\n' "${MAGENTA}${BOLD} ██╔════╝ ██╔════╝██╔══██╗██║     ██║${NC}"
+  printf '%b\n' "${MAGENTA}${BOLD} ██║  ███╗███████╗███████║██║     ██║${NC}"
+  printf '%b\n' "${MAGENTA}${BOLD} ██║   ██║╚════██║██╔══██║██║     ██║${NC}"
+  printf '%b\n' "${MAGENTA}${BOLD} ╚██████╔╝███████║██║  ██║███████╗███████╗${NC}"
+  printf '%b\n' "${MAGENTA}${BOLD}  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝${NC}"
+
   printf '%b\n\n' "${DIM}  Git status all repositories in $ROOT${NC}"
 
+  local nbprojects=0
   for dir in "$ROOT"/*; do
     [ -d "$dir" ] || continue
     [ -d "$dir/.git" ] || continue
     found_any=true
     print_repo_status "$dir"
+    nbprojects=$((nbprojects + 1))
   done
 
   if [ "$found_any" = false ]; then
@@ -456,7 +471,7 @@ gsall() {
     return 0
   fi
 
-  printf '%b\n' "${BOLD}Summary${NC}"
+  printf '%b\n' "${BOLD}Summary${NC} (${nbprojects} projects)"
   print_repo_list_line "  ${GREEN}clean / no upstream${NC}" "$GREEN" "$summary_clean_no_upstream" "${summary_clean_no_upstream_repos[@]}"
   print_repo_list_line "  ${CYAN}clean / with upstream${NC}" "$CYAN" "$summary_clean_with_upstream" "${summary_clean_with_upstream_repos[@]}"
   print_repo_list_line "  ${YELLOW}staged dirty${NC}" "$YELLOW" "$summary_staged_dirty" "${summary_staged_dirty_repos[@]}"
