@@ -448,14 +448,14 @@ gsall() {
   local found_any=false
   local dir
   printf '\n'
-  printf '%b\n' "${MAGENTA}${BOLD}  ██████╗ ███████╗ █████╗ ██╗     ██╗${NC}"
-  printf '%b\n' "${MAGENTA}${BOLD} ██╔════╝ ██╔════╝██╔══██╗██║     ██║${NC}"
-  printf '%b\n' "${MAGENTA}${BOLD} ██║  ███╗███████╗███████║██║     ██║${NC}"
-  printf '%b\n' "${MAGENTA}${BOLD} ██║   ██║╚════██║██╔══██║██║     ██║${NC}"
-  printf '%b\n' "${MAGENTA}${BOLD} ╚██████╔╝███████║██║  ██║███████╗███████╗${NC}"
-  printf '%b\n' "${MAGENTA}${BOLD}  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝${NC}"
+  printf '%b\n' "${MAGENTA}${BOLD}  ██████${NC}${BOLD}╗ ${MAGENTA}███████${NC}${BOLD}╗ ${MAGENTA}█████${NC}${BOLD}╗ ${MAGENTA}██${NC}${BOLD}╗     ${MAGENTA}██${NC}${BOLD}╗${NC}"
+  printf '%b\n' "${MAGENTA}${BOLD} ██${NC}${BOLD}╔════╝ ${MAGENTA}██${NC}${BOLD}╔════╝${MAGENTA}██${NC}${BOLD}╔══${MAGENTA}██${NC}${BOLD}╗${MAGENTA}██${NC}${BOLD}║     ${MAGENTA}██${NC}${BOLD}║${NC}"
+  printf '%b\n' "${MAGENTA}${BOLD} ██${NC}${BOLD}║  ${MAGENTA}███${NC}${BOLD}╗${MAGENTA}███████${NC}${BOLD}╗${MAGENTA}███████${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}║     ${MAGENTA}██${NC}${BOLD}║${NC}"
+  printf '%b\n' "${MAGENTA}${BOLD} ██${NC}${BOLD}║   ${MAGENTA}██${NC}${BOLD}║╚════${MAGENTA}██${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}╔══${MAGENTA}██${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}║     ${MAGENTA}██${NC}${BOLD}║${NC}"
+  printf '%b\n' "${MAGENTA}${BOLD} ${NC}${BOLD}╚${MAGENTA}██████${NC}${BOLD}╔╝${MAGENTA}███████${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}║  ${MAGENTA}██${NC}${BOLD}║${MAGENTA}███████${NC}${BOLD}╗${MAGENTA}███████${NC}${BOLD}╗${NC}"
+  printf '%b\n' "${NC}${BOLD}  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝${NC}"
 
-  printf '%b\n\n' "${DIM}  Git status all repositories in $ROOT${NC}"
+  printf '%b\n\n' "${DIM}  Git status all repositories in $ROOT/*${NC}"
 
   local nbprojects=0
   for dir in "$ROOT"/*; do
