@@ -438,6 +438,12 @@ gsall() {
 
   local found_any=false
   local dir
+  printf '%b\n' "${BOLD}  ___  ____   __   __    __   ${NC}"
+  printf '%b\n' "${BOLD} / __)/ ___) / _\\ (  )  (  )  ${NC}"
+  printf '%b\n' "${BOLD}( (_ \\\\___ \\/    \\/ (_/\\/ (_/\\ ${NC}"
+  printf '%b\n\n' "${BOLD} \\___/(____/\\_/\\_/\\____/\\____/${NC}"
+  printf '%b\n\n' "${DIM}  Git status all repositories in $ROOT${NC}"
+
   for dir in "$ROOT"/*; do
     [ -d "$dir" ] || continue
     [ -d "$dir/.git" ] || continue
@@ -455,4 +461,6 @@ gsall() {
   print_repo_list_line "  ${CYAN}clean / with upstream${NC}" "$CYAN" "$summary_clean_with_upstream" "${summary_clean_with_upstream_repos[@]}"
   print_repo_list_line "  ${YELLOW}staged dirty${NC}" "$YELLOW" "$summary_staged_dirty" "${summary_staged_dirty_repos[@]}"
   print_repo_list_line "  ${RED}dirty${NC}" "$RED" "$summary_dirty" "${summary_dirty_repos[@]}"
+
+  printf '\n'
 }
