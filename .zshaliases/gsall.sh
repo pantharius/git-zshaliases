@@ -10,6 +10,7 @@ gsall() {
   local error_found=false
   local staged_only=false
   local brief_only=false
+  local verbose_only=false
   local fetch_remote=false
   local ROOT='.'
   local -a positional_args=()
@@ -53,13 +54,14 @@ gsall() {
   fi
 
   print_help() {
-    echo "\x1b[1mUsage:\x1b[0m \x1b[2mgsall [folder] [--staged] [--fetch] [--brief]\x1b[0m"
+    echo "\x1b[1mUsage:\x1b[0m \x1b[2mgsall [folder] [--staged] [--fetch] [--verbose] [--brief]\x1b[0m"
     echo "\x1b[2mShow git status for all git repositories found in the given root directory.\x1b[0m"
-    echo "\x1b[2mDefault root directory is the current directory (.).\x1b[0m"
+    echo "\x1b[2mDefault mode shows only dirty / staged-dirty repositories with their details.\x1b[0m"
+    echo "\x1b[2mUse --verbose to show all repositories, including clean ones, with full details.\x1b[0m"
+    echo "\x1b[2mUse --brief to show only the summary, with repo names listed for each category.\x1b[0m"
     echo "\x1b[2mUse --staged to show only working changes (diff from staged state).\x1b[0m"
     echo "\x1b[2mUse --fetch to run git fetch on each repository before computing ahead/behind.\x1b[0m"
-    echo "\x1b[2mUse --brief to show only the summary, with repo names listed for each category.\x1b[0m"
-    echo "\x1b[2mShort flags are supported: -s, -f, -b, -h, as well as combined forms like -sf, -fs, -bf or -bfs.\x1b[0m"
+    echo "\x1b[2mShort flags are supported: -s, -f, -v, -b, -h, as well as combined forms like -vf, -bf or -bvf.\x1b[0m"
     echo "\x1b[2mThe folder argument defaults to the current directory (.).\x1b[0m"
   }
 
@@ -114,14 +116,15 @@ gsall() {
     local label="$1"
     local item_color="$2"
     local count="$3"
-    shift 3
+    local show_links="$4"
+    shift 4
     local -a repos=("$@")
     local item
     local first=true
 
     printf '%b : %s' "$label" "$count"
 
-    if [ "$brief_only" = true ] && [ "${#repos[@]}" -gt 0 ]; then
+    if [ "$show_links" = true ] && [ "${#repos[@]}" -gt 0 ]; then
       printf ' '
       for item in "${repos[@]}"; do
         if [ "$first" = true ]; then
@@ -217,6 +220,9 @@ gsall() {
       --brief)
         brief_only=true
         ;;
+      --verbose)
+        verbose_only=true
+        ;;
       --)
         ;;
       -*)
@@ -243,6 +249,9 @@ gsall() {
               ;;
             b)
               brief_only=true
+              ;;
+            v)
+              verbose_only=true
               ;;
             *)
               echo "\x1b[31mUnknown option: -${short_flag}\x1b[0m"
@@ -321,6 +330,7 @@ gsall() {
     local line
     local counts
     local has_remote_diff=false
+    local should_print_repo=false
 
     repo_name="$(basename "$dir")"
     branch="$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
@@ -336,17 +346,6 @@ gsall() {
       counts="$(git -C "$dir" rev-list --left-right --count HEAD...@{upstream} 2>/dev/null || echo '0 0')"
       ahead="$(awk '{print $1}' <<< "$counts")"
       behind="$(awk '{print $2}' <<< "$counts")"
-    fi
-
-    ahead_color="$NC"
-    behind_color="$NC"
-
-    if [ "$ahead" != "0" ]; then
-      ahead_color="$YELLOW"
-    fi
-
-    if [ "$behind" != "0" ]; then
-      behind_color="$YELLOW"
     fi
 
     if [ "$ahead" != "0" ] || [ "$behind" != "0" ]; then
@@ -373,7 +372,13 @@ gsall() {
       done <<< "$porcelain"
     fi
 
-    if [ "$brief_only" = false ]; then
+    if [ "$verbose_only" = true ]; then
+      should_print_repo=true
+    elif [ "$brief_only" = false ] && [ "$has_changes" = true ]; then
+      should_print_repo=true
+    fi
+
+    if [ "$brief_only" = false ] && [ "$should_print_repo" = true ]; then
       print_repo_heading "$repo_name" "$dir"
       printf '%b\n' "  branch   : ${CYAN}${branch}${NC}"
 
@@ -398,7 +403,7 @@ gsall() {
         summary_clean_no_upstream_repos+=("$repo_name")
       fi
 
-      if [ "$brief_only" = false ]; then
+      if [ "$brief_only" = false ] && [ "$verbose_only" = true ]; then
         printf '%b\n\n' "  status   : ${GREEN}clean${NC}"
       fi
       return
@@ -416,11 +421,11 @@ gsall() {
       summary_staged_dirty_repos+=("$repo_name")
     fi
 
-    if [ "$brief_only" = false ]; then
+    if [ "$brief_only" = false ] && [ "$should_print_repo" = true ]; then
       printf '%b\n' "  status   : ${status_color}${status_label}${NC}"
     fi
 
-    if [ "$brief_only" = true ]; then
+    if [ "$brief_only" = true ] || [ "$should_print_repo" = false ]; then
       return
     fi
 
@@ -455,7 +460,14 @@ gsall() {
   printf '%b\n' "${MAGENTA}${BOLD} ${NC}${BOLD}╚${MAGENTA}██████${NC}${BOLD}╔╝${MAGENTA}███████${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}║  ${MAGENTA}██${NC}${BOLD}║${MAGENTA}███████${NC}${BOLD}╗${MAGENTA}███████${NC}${BOLD}╗${NC}"
   printf '%b\n' "${NC}${BOLD}  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝${NC}"
 
-  printf '%b\n\n' "${DIM}  Git status all repositories in $ROOT/*${NC}"
+  if [ "$brief_only" = false ]; then
+    printf '%b\n' "${DIM}  Git status overview for repositories in $ROOT/*${NC}"
+    if [ "$verbose_only" = true ]; then
+      printf '%b\n\n' "${DIM}  Mode: verbose (all repositories)${NC}"
+    else
+      printf '%b\n\n' "${DIM}  Mode: normal (dirty / staged-dirty repositories only)${NC}"
+    fi
+  fi
 
   local nbprojects=0
   for dir in "$ROOT"/*; do
@@ -471,11 +483,22 @@ gsall() {
     return 0
   fi
 
+  local show_clean_links=false
+  local show_dirty_links=false
+
+  if [ "$brief_only" = true ]; then
+    show_clean_links=true
+    show_dirty_links=true
+  else
+    show_clean_links=true
+    show_dirty_links=false
+  fi
+
   printf '%b\n' "${BOLD}Summary${NC} (${nbprojects} projects)"
-  print_repo_list_line "  ${GREEN}clean / no upstream${NC}" "$GREEN" "$summary_clean_no_upstream" "${summary_clean_no_upstream_repos[@]}"
-  print_repo_list_line "  ${CYAN}clean / with upstream${NC}" "$CYAN" "$summary_clean_with_upstream" "${summary_clean_with_upstream_repos[@]}"
-  print_repo_list_line "  ${YELLOW}staged dirty${NC}" "$YELLOW" "$summary_staged_dirty" "${summary_staged_dirty_repos[@]}"
-  print_repo_list_line "  ${RED}dirty${NC}" "$RED" "$summary_dirty" "${summary_dirty_repos[@]}"
+  print_repo_list_line "  ${GREEN}clean / no upstream${NC}" "$GREEN" "$summary_clean_no_upstream" "$show_clean_links" "${summary_clean_no_upstream_repos[@]}"
+  print_repo_list_line "  ${CYAN}clean / with upstream${NC}" "$CYAN" "$summary_clean_with_upstream" "$show_clean_links" "${summary_clean_with_upstream_repos[@]}"
+  print_repo_list_line "  ${YELLOW}staged dirty${NC}" "$YELLOW" "$summary_staged_dirty" "$show_dirty_links" "${summary_staged_dirty_repos[@]}"
+  print_repo_list_line "  ${RED}dirty${NC}" "$RED" "$summary_dirty" "$show_dirty_links" "${summary_dirty_repos[@]}"
 
   printf '\n'
 }
