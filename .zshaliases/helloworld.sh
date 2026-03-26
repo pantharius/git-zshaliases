@@ -93,27 +93,32 @@ bg_color_value() {
 render_multi_colored_ascii() {
   local rules_end_index=0
   local arg
+  local -a all_args
+  all_args=("$@")
 
   for (( rules_end_index = 1; rules_end_index <= $#; rules_end_index++ )); do
-    arg="${@[rules_end_index]}"
+    arg="${all_args[$rules_end_index]}"
     if [ "$arg" = '--' ]; then
       break
     fi
   done
 
   local -a rules lines
-  rules=("${@:1:$((rules_end_index - 1))}")
-  lines=("${@:$((rules_end_index + 1))}")
+  rules=("${all_args[@]:0:$((rules_end_index - 1))}")
+  lines=("${all_args[@]:$rules_end_index}")
 
   local -a rule_chars rule_fg_codes rule_bg_codes
-  local rule
-  local -a rule_parts
+  local matched_chars fg_name bg_name rest
 
   for rule in "${rules[@]}"; do
-    rule_parts=(${(s:|:)rule})
-    rule_chars+=("${rule_parts[1]}")
-    rule_fg_codes+=("$(color_value "${rule_parts[2]}")")
-    rule_bg_codes+=("$(bg_color_value "${rule_parts[3]}")")
+    matched_chars="${rule%%|*}"
+    rest="${rule#*|}"
+    fg_name="${rest%%|*}"
+    bg_name="${rest#*|}"
+
+    rule_chars+=("${matched_chars}")
+    rule_fg_codes+=("$(color_value "${fg_name}")")
+    rule_bg_codes+=("$(bg_color_value "${bg_name}")")
   done
 
   local output=''
