@@ -11,7 +11,9 @@ gsall() {
   local staged_only=false
   local brief_only=false
   local verbose_only=false
+  local no_header=false
   local fetch_remote=false
+  local pull_remote=false
   local ROOT='.'
   local -a positional_args=()
 
@@ -54,14 +56,18 @@ gsall() {
   fi
 
   print_help() {
-    echo "\x1b[1mUsage:\x1b[0m \x1b[2mgsall [folder] [--staged] [--fetch] [--verbose] [--brief]\x1b[0m"
+    echo "\x1b[1mUsage:\x1b[0m \x1b[2mgsall [folder] [--staged] [--fetch|--pull] [--verbose|--brief] [--no-header]\x1b[0m"
     echo "\x1b[2mShow git status for all git repositories found in the given root directory.\x1b[0m"
     echo "\x1b[2mDefault mode shows only dirty / staged-dirty repositories with their details.\x1b[0m"
     echo "\x1b[2mUse --verbose to show all repositories, including clean ones, with full details.\x1b[0m"
     echo "\x1b[2mUse --brief to show only the summary, with repo names listed for each category.\x1b[0m"
-    echo "\x1b[2mUse --staged to show only working changes (diff from staged state).\x1b[0m"
+    echo "\x1b[2mUse --staged to show only staged changes.\x1b[0m"
     echo "\x1b[2mUse --fetch to run git fetch on each repository before computing ahead/behind.\x1b[0m"
-    echo "\x1b[2mShort flags are supported: -s, -f, -v, -b, -h, as well as combined forms like -vf, -bf or -bvf.\x1b[0m"
+    echo "\x1b[2mUse --pull to run git pull --ff-only on each repository before computing ahead/behind.\x1b[0m"
+    echo "\x1b[2mUse --no-header to hide the ASCII art and top informational header.\x1b[0m"
+    echo "\x1b[2mOnly one display mode can be used at a time: --brief, --verbose, or neither.\x1b[0m"
+    echo "\x1b[2mOnly one update mode can be used at a time: --fetch, --pull, or neither.\x1b[0m"
+    echo "\x1b[2mShort flags are supported: -s, -f, -p, -v, -b, -n, -h, as well as combined forms like -vf or -bpn.\x1b[0m"
     echo "\x1b[2mThe folder argument defaults to the current directory (.).\x1b[0m"
   }
 
@@ -217,11 +223,17 @@ gsall() {
       --fetch)
         fetch_remote=true
         ;;
+      --pull)
+        pull_remote=true
+        ;;
       --brief)
         brief_only=true
         ;;
       --verbose)
         verbose_only=true
+        ;;
+      --no-header)
+        no_header=true
         ;;
       --)
         ;;
@@ -247,11 +259,17 @@ gsall() {
             f)
               fetch_remote=true
               ;;
+            p)
+              pull_remote=true
+              ;;
             b)
               brief_only=true
               ;;
             v)
               verbose_only=true
+              ;;
+            n)
+              no_header=true
               ;;
             *)
               echo "\x1b[31mUnknown option: -${short_flag}\x1b[0m"
@@ -273,6 +291,16 @@ gsall() {
 
   if [[ ${#positional_args[@]} -eq 1 ]]; then
     ROOT="${positional_args[1]}"
+  fi
+
+  if [ "$brief_only" = true ] && [ "$verbose_only" = true ]; then
+    echo "\x1b[31mOptions --brief and --verbose cannot be used together\x1b[0m"
+    error_found=true
+  fi
+
+  if [ "$fetch_remote" = true ] && [ "$pull_remote" = true ]; then
+    echo "\x1b[31mOptions --fetch and --pull cannot be used together\x1b[0m"
+    error_found=true
   fi
 
   if ! $help_requested && ! $error_found; then
@@ -330,6 +358,8 @@ gsall() {
     local line
     local counts
     local has_remote_diff=false
+    local effective_has_changes=false
+    local effective_has_working=false
     local should_print_repo=false
 
     repo_name="$(basename "$dir")"
@@ -339,6 +369,9 @@ gsall() {
     if [ "$fetch_remote" = true ]; then
       echo "Fetching ${repo_name}..."
       git -C "$dir" fetch --quiet >/dev/null 2>&1 || true
+    elif [ "$pull_remote" = true ]; then
+      echo "Pulling ${repo_name}..."
+      git -C "$dir" pull --ff-only --quiet >/dev/null 2>&1 || true
     fi
 
     if [ -n "$upstream" ]; then
@@ -372,10 +405,33 @@ gsall() {
       done <<< "$porcelain"
     fi
 
+    effective_has_changes="$has_changes"
+    effective_has_working="$has_working"
+
+    if [ "$staged_only" = true ]; then
+      if [ "$has_staged" = true ]; then
+        effective_has_changes=true
+      else
+        effective_has_changes=false
+      fi
+      effective_has_working=false
+    fi
+
     if [ "$verbose_only" = true ]; then
       should_print_repo=true
-    elif [ "$brief_only" = false ] && [ "$has_changes" = true ]; then
+    elif [ "$brief_only" = false ] && [ "$effective_has_changes" = true ]; then
       should_print_repo=true
+    fi
+
+    ahead_color="$NC"
+    behind_color="$NC"
+
+    if [ "$ahead" != "0" ]; then
+      ahead_color="$YELLOW"
+    fi
+
+    if [ "$behind" != "0" ]; then
+      behind_color="$YELLOW"
     fi
 
     if [ "$brief_only" = false ] && [ "$should_print_repo" = true ]; then
@@ -394,7 +450,7 @@ gsall() {
       fi
     fi
 
-    if [ "$has_changes" = false ]; then
+    if [ "$effective_has_changes" = false ]; then
       if [ "$has_upstream" = true ] && [ "$has_remote_diff" = true ]; then
         summary_clean_with_upstream=$((summary_clean_with_upstream + 1))
         summary_clean_with_upstream_repos+=("$repo_name")
@@ -403,13 +459,13 @@ gsall() {
         summary_clean_no_upstream_repos+=("$repo_name")
       fi
 
-      if [ "$brief_only" = false ] && [ "$verbose_only" = true ]; then
+      if [ "$brief_only" = false ] && [ "$verbose_only" = true ] && [ "$should_print_repo" = true ]; then
         printf '%b\n\n' "  status   : ${GREEN}clean${NC}"
       fi
       return
     fi
 
-    if [ "$has_working" = true ]; then
+    if [ "$effective_has_working" = true ]; then
       status_label="dirty"
       status_color="$RED"
       summary_dirty=$((summary_dirty + 1))
@@ -431,7 +487,7 @@ gsall() {
 
     local printed_changes=false
 
-    if [ "$staged_only" = false ] && [ "$has_staged" = true ]; then
+    if [ "$has_staged" = true ]; then
       printf '%s\n' "  staged changes :"
       while IFS= read -r line; do
         print_change_line "staged" "$line"
@@ -439,7 +495,7 @@ gsall() {
       printed_changes=true
     fi
 
-    if [ "$has_working" = true ]; then
+    if [ "$staged_only" = false ] && [ "$has_working" = true ]; then
       printf '%s\n' "  working changes:"
       while IFS= read -r line; do
         print_change_line "working" "$line"
@@ -452,20 +508,36 @@ gsall() {
 
   local found_any=false
   local dir
-  printf '\n'
-  printf '%b\n' "${MAGENTA}${BOLD}  ██████${NC}${BOLD}╗ ${MAGENTA}███████${NC}${BOLD}╗ ${MAGENTA}█████${NC}${BOLD}╗ ${MAGENTA}██${NC}${BOLD}╗     ${MAGENTA}██${NC}${BOLD}╗${NC}"
-  printf '%b\n' "${MAGENTA}${BOLD} ██${NC}${BOLD}╔════╝ ${MAGENTA}██${NC}${BOLD}╔════╝${MAGENTA}██${NC}${BOLD}╔══${MAGENTA}██${NC}${BOLD}╗${MAGENTA}██${NC}${BOLD}║     ${MAGENTA}██${NC}${BOLD}║${NC}"
-  printf '%b\n' "${MAGENTA}${BOLD} ██${NC}${BOLD}║  ${MAGENTA}███${NC}${BOLD}╗${MAGENTA}███████${NC}${BOLD}╗${MAGENTA}███████${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}║     ${MAGENTA}██${NC}${BOLD}║${NC}"
-  printf '%b\n' "${MAGENTA}${BOLD} ██${NC}${BOLD}║   ${MAGENTA}██${NC}${BOLD}║╚════${MAGENTA}██${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}╔══${MAGENTA}██${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}║     ${MAGENTA}██${NC}${BOLD}║${NC}"
-  printf '%b\n' "${MAGENTA}${BOLD} ${NC}${BOLD}╚${MAGENTA}██████${NC}${BOLD}╔╝${MAGENTA}███████${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}║  ${MAGENTA}██${NC}${BOLD}║${MAGENTA}███████${NC}${BOLD}╗${MAGENTA}███████${NC}${BOLD}╗${NC}"
-  printf '%b\n' "${NC}${BOLD}  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝${NC}"
+  if [ "$no_header" = false ]; then
+    printf '\n'
+    printf '%b\n' "${MAGENTA}${BOLD}  ██████${NC}${BOLD}╗ ${MAGENTA}███████${NC}${BOLD}╗ ${MAGENTA}█████${NC}${BOLD}╗ ${MAGENTA}██${NC}${BOLD}╗     ${MAGENTA}██${NC}${BOLD}╗${NC}"
+    printf '%b\n' "${MAGENTA}${BOLD} ██${NC}${BOLD}╔════╝ ${MAGENTA}██${NC}${BOLD}╔════╝${MAGENTA}██${NC}${BOLD}╔══${MAGENTA}██${NC}${BOLD}╗${MAGENTA}██${NC}${BOLD}║     ${MAGENTA}██${NC}${BOLD}║${NC}"
+    printf '%b\n' "${MAGENTA}${BOLD} ██${NC}${BOLD}║  ${MAGENTA}███${NC}${BOLD}╗${MAGENTA}███████${NC}${BOLD}╗${MAGENTA}███████${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}║     ${MAGENTA}██${NC}${BOLD}║${NC}"
+    printf '%b\n' "${MAGENTA}${BOLD} ██${NC}${BOLD}║   ${MAGENTA}██${NC}${BOLD}║╚════${MAGENTA}██${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}╔══${MAGENTA}██${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}║     ${MAGENTA}██${NC}${BOLD}║${NC}"
+    printf '%b\n' "${MAGENTA}${BOLD} ${NC}${BOLD}╚${MAGENTA}██████${NC}${BOLD}╔╝${MAGENTA}███████${NC}${BOLD}║${MAGENTA}██${NC}${BOLD}║  ${MAGENTA}██${NC}${BOLD}║${MAGENTA}███████${NC}${BOLD}╗${MAGENTA}███████${NC}${BOLD}╗${NC}"
+    printf '%b\n' "${NC}${BOLD}  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝${NC}"
 
-  if [ "$brief_only" = false ]; then
-    printf '%b\n' "${DIM}  Git status overview for repositories in $ROOT/*${NC}"
-    if [ "$verbose_only" = true ]; then
-      printf '%b\n\n' "${DIM}  Mode: verbose (all repositories)${NC}"
-    else
-      printf '%b\n\n' "${DIM}  Mode: normal (dirty / staged-dirty repositories only)${NC}"
+    if [ "$brief_only" = false ]; then
+      printf '%b\n' "${DIM}  Git status overview for repositories in $ROOT/*${NC}"
+      if [ "$verbose_only" = true ]; then
+        printf '%b\n' "${DIM}  Display mode: verbose (all repositories)${NC}"
+      else
+        printf '%b\n' "${DIM}  Display mode: hybrid (dirty / staged-dirty repositories only)${NC}"
+      fi
+
+      if [ "$fetch_remote" = true ]; then
+        printf '%b\n' "${DIM}  Update mode : fetch${NC}"
+      elif [ "$pull_remote" = true ]; then
+        printf '%b\n' "${DIM}  Update mode : pull --ff-only${NC}"
+      else
+        printf '%b\n' "${DIM}  Update mode : none${NC}"
+      fi
+
+      if [ "$staged_only" = true ]; then
+        printf '%b\n\n' "${DIM}  Changes mode: staged only${NC}"
+      else
+        printf '%b\n\n' "${DIM}  Changes mode: staged + working tree${NC}"
+      fi
     fi
   fi
 
@@ -483,16 +555,8 @@ gsall() {
     return 0
   fi
 
-  local show_clean_links=false
-  local show_dirty_links=false
-
-  if [ "$brief_only" = true ]; then
-    show_clean_links=true
-    show_dirty_links=true
-  else
-    show_clean_links=true
-    show_dirty_links=false
-  fi
+  local show_clean_links=true
+  local show_dirty_links=true
 
   printf '%b\n' "${BOLD}Summary${NC} (${nbprojects} projects)"
   print_repo_list_line "  ${GREEN}clean / no upstream${NC}" "$GREEN" "$summary_clean_no_upstream" "$show_clean_links" "${summary_clean_no_upstream_repos[@]}"
